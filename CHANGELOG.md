@@ -8,4 +8,5 @@ First release.
   Hypervisor VM with no network device, files in and out on disks.
 - Operator, runner (Cloud Hypervisor v55.0), guest init, `/dev/kvm` device
   plugin, ValidatingAdmissionPolicy for the operator's pods.
-- `imagePullSecrets` for private guest images.
+- `imagePullSecrets` for private guest images, `imagePullPolicy` for a guest
+  image that follows a tag.

@@ -2,8 +2,16 @@ use super::*;
 
 fn spec() -> VmJobSpec {
     VmJobSpec {
-        kernel: ImageFile { image: "registry.example/kernel:1".into(), path: "vmlinux".into() },
-        rootfs: ImageFile { image: "registry.example/rootfs:1".into(), path: "rootfs.ext4".into() },
+        kernel: ImageFile {
+            image: "registry.example/kernel:1".into(),
+            path: "vmlinux".into(),
+            image_pull_policy: None,
+        },
+        rootfs: ImageFile {
+            image: "registry.example/rootfs:1".into(),
+            path: "rootfs.ext4".into(),
+            image_pull_policy: None,
+        },
         kernel_args: None,
         command: vec!["/bin/true".into()],
         env: BTreeMap::new(),
@@ -35,6 +43,7 @@ fn bounds_and_paths_are_checked() {
         ("memoryMib", Box::new(|s| s.memory_mib = 64)),
         ("timeoutSeconds", Box::new(|s| s.timeout_seconds = 0)),
         ("path", Box::new(|s| s.kernel.path = "/vmlinux".into())),
+        ("imagePullPolicy", Box::new(|s| s.rootfs.image_pull_policy = Some("Sometimes".into()))),
         ("path", Box::new(|s| s.rootfs.path = "a/../../etc".into())),
         ("path", Box::new(|s| s.rootfs.path = String::new())),
         (

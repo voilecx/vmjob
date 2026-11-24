@@ -1723,6 +1723,11 @@
                         "description": "The image reference; a digest reference pins what boots.",
                         "type": "string"
                       },
+                      "imagePullPolicy": {
+                        "description": "`IfNotPresent` (absent), `Always` or `Never`: with `Always` a tag that\nmoves boots its newest image, at the cost of one registry lookup.",
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "path": {
                         "description": "The file's path inside the image, relative to its root.",
                         "type": "string"
@@ -3400,6 +3405,11 @@
                     "properties": {
                       "image": {
                         "description": "The image reference; a digest reference pins what boots.",
+                        "type": "string"
+                      },
+                      "imagePullPolicy": {
+                        "description": "`IfNotPresent` (absent), `Always` or `Never`: with `Always` a tag that\nmoves boots its newest image, at the cost of one registry lookup.",
+                        "nullable": true,
                         "type": "string"
                       },
                       "path": {

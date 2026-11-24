@@ -15,8 +15,16 @@ fn job() -> VmJob {
     let mut job = VmJob::new(
         "build-1",
         VmJobSpec {
-            kernel: ImageFile { image: "registry.example/kernel@sha256:00".into(), path: "vmlinux".into() },
-            rootfs: ImageFile { image: "registry.example/rootfs@sha256:11".into(), path: "rootfs.ext4".into() },
+            kernel: ImageFile {
+                image: "registry.example/kernel@sha256:00".into(),
+                path: "vmlinux".into(),
+                image_pull_policy: None,
+            },
+            rootfs: ImageFile {
+                image: "registry.example/rootfs:main".into(),
+                path: "rootfs.ext4".into(),
+                image_pull_policy: Some("Always".into()),
+            },
             kernel_args: None,
             command: vec!["/usr/bin/make".into()],
             env: BTreeMap::new(),
@@ -75,6 +83,11 @@ fn the_volumes_are_the_images_the_transfers_and_the_work_directory() {
     assert_eq!(
         volumes[0].image.as_ref().and_then(|i| i.reference.as_deref()),
         Some("registry.example/kernel@sha256:00")
+    );
+    let policy = |v: &Volume| v.image.as_ref().and_then(|i| i.pull_policy.clone());
+    assert_eq!(
+        (policy(&volumes[0]).as_deref(), policy(&volumes[1]).as_deref()),
+        (Some("IfNotPresent"), Some("Always"))
     );
     assert_eq!(volumes[4].empty_dir.as_ref().and_then(|e| e.size_limit.clone()).map(|q| q.0), Some("4608Mi".into()));
     let mounts = spec.containers[0].volume_mounts.as_ref().expect("mounts");

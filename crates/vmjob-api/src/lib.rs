@@ -103,6 +103,10 @@ pub struct ImageFile {
     pub image: String,
     /// The file's path inside the image, relative to its root.
     pub path: String,
+    /// `IfNotPresent` (absent), `Always` or `Never`: with `Always` a tag that
+    /// moves boots its newest image, at the cost of one registry lookup.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_pull_policy: Option<String>,
 }
 
 /// A directory of a volume.
@@ -220,6 +224,9 @@ impl VmJobSpec {
             }
             if !relative_path(&file.path) || file.path.is_empty() {
                 return bad("an image file's path must be relative, without `..`");
+            }
+            if !matches!(file.image_pull_policy.as_deref(), None | Some("Always" | "IfNotPresent" | "Never")) {
+                return bad("an image file's imagePullPolicy must be Always, IfNotPresent or Never");
             }
         }
         for transfer in [self.input.as_ref(), self.output.as_ref().map(|o| &o.to)].into_iter().flatten() {

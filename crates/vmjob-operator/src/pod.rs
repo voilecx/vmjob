@@ -145,12 +145,15 @@ fn volumes(
     settings: &Settings,
     output_bytes: Option<u64>,
 ) -> (Vec<Volume>, Vec<VolumeMount>) {
-    let image = |name: &str, image: &str| Volume {
+    let image = |name: &str, file: &vmjob_api::ImageFile| Volume {
         name: name.to_owned(),
-        image: Some(ImageVolumeSource { reference: Some(image.to_owned()), pull_policy: Some("IfNotPresent".into()) }),
+        image: Some(ImageVolumeSource {
+            reference: Some(file.image.clone()),
+            pull_policy: Some(file.image_pull_policy.clone().unwrap_or_else(|| "IfNotPresent".into())),
+        }),
         ..Volume::default()
     };
-    let mut volumes = vec![image("kernel", &spec.kernel.image), image("rootfs", &spec.rootfs.image)];
+    let mut volumes = vec![image("kernel", &spec.kernel), image("rootfs", &spec.rootfs)];
     let mount = |name: &str, path: &str, read_only: bool, sub_path: &str| VolumeMount {
         name: name.to_owned(),
         mount_path: path.to_owned(),
