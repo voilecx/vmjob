@@ -14,6 +14,7 @@ fn spec() -> VmJobSpec {
         timeout_seconds: 60,
         ttl_seconds_after_finished: None,
         node_selector: BTreeMap::new(),
+        image_pull_secrets: Vec::new(),
     }
 }
 

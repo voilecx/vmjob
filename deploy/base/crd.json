@@ -63,6 +63,23 @@
                     "description": "Its environment.",
                     "type": "object"
                   },
+                  "imagePullSecrets": {
+                    "description": "Secrets in the job's namespace to pull the kernel and root filesystem\nimages with, when they are private.",
+                    "items": {
+                      "description": "LocalObjectReference contains enough information to let you locate the referenced object inside the same namespace.",
+                      "properties": {
+                        "name": {
+                          "description": "Name of the referent. This field is effectively required, but due to backwards compatibility is allowed to be empty. Instances of this type with an empty value here are almost certainly wrong. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
                   "input": {
                     "description": "What the job reads: a directory of a volume, copied into the guest's job\ndirectory before the command runs.",
                     "nullable": true,

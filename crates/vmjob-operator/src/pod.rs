@@ -97,6 +97,7 @@ pub fn build(job: &VmJob, settings: &Settings) -> anyhow::Result<Pod> {
             automount_service_account_token: Some(false),
             enable_service_links: Some(false),
             node_selector: (!spec.node_selector.is_empty()).then(|| spec.node_selector.clone()),
+            image_pull_secrets: (!spec.image_pull_secrets.is_empty()).then(|| spec.image_pull_secrets.clone()),
             security_context: Some(PodSecurityContext {
                 run_as_non_root: Some(true),
                 run_as_user: Some(65_532),

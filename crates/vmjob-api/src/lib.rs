@@ -17,7 +17,7 @@
 
 use std::collections::BTreeMap;
 
-use k8s_openapi::api::core::v1::Volume;
+use k8s_openapi::api::core::v1::{LocalObjectReference, Volume};
 use kube::CustomResource;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -89,6 +89,10 @@ pub struct VmJobSpec {
     /// Constrain the runner pod to nodes with these labels.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub node_selector: BTreeMap<String, String>,
+    /// Secrets in the job's namespace to pull the kernel and root filesystem
+    /// images with, when they are private.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub image_pull_secrets: Vec<LocalObjectReference>,
 }
 
 /// A file inside an OCI image, mounted as an image volume.

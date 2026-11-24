@@ -1,5 +1,6 @@
 use k8s_openapi::api::core::v1::{
-    ContainerState, ContainerStateTerminated, ContainerStatus, PersistentVolumeClaimVolumeSource, PodStatus,
+    ContainerState, ContainerStateTerminated, ContainerStatus, LocalObjectReference, PersistentVolumeClaimVolumeSource,
+    PodStatus,
 };
 use vmjob_api::{ImageFile, Output, Transfer, VmJobSpec};
 
@@ -26,6 +27,7 @@ fn job() -> VmJob {
             timeout_seconds: 600,
             ttl_seconds_after_finished: Some(60),
             node_selector: BTreeMap::new(),
+            image_pull_secrets: vec![LocalObjectReference { name: "registry".into() }],
         },
     );
     job.metadata.namespace = Some("jobs".into());
@@ -47,6 +49,7 @@ fn the_runner_pod_is_unprivileged_and_owned_by_its_job() {
     let spec = pod.spec.as_ref().expect("spec");
     assert_eq!(spec.restart_policy.as_deref(), Some("Never"));
     assert_eq!(spec.automount_service_account_token, Some(false));
+    assert_eq!(spec.image_pull_secrets.as_deref().map(|s| s[0].name.as_str()), Some("registry"));
     let security = spec.security_context.as_ref().expect("pod security");
     assert_eq!(security.run_as_non_root, Some(true));
     let container = &spec.containers[0];
