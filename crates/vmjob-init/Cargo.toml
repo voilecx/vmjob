@@ -1,0 +1,20 @@
+[package]
+name = "vmjob-init"
+description = "PID 1 of a vmjob guest: unpack the input, run the command, pack the output, power off"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+vmjob-api.workspace = true
+anyhow.workspace = true
+serde_json.workspace = true
+tar.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+nix = { version = "0.32", features = ["mount", "reboot", "fs"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,51 @@
+# The operator may create pods in any namespace. This policy holds it to the
+# runner's shape, so its token could not be used for anything more: one
+# unprivileged container, no host namespaces, no hostPath, the vmjob label.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: vmjob-operator-pods
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE]
+        resources: [pods]
+  matchConditions:
+    - name: by-the-operator
+      expression: request.userInfo.username == "system:serviceaccount:vmjob-system:vmjob-operator"
+  validations:
+    - expression: has(object.metadata.labels) && "vmjob.voile.cx/job-uid" in object.metadata.labels
+      message: the operator creates only runner pods
+    - expression: >-
+        size(object.spec.containers) == 1 &&
+        (!has(object.spec.initContainers) || size(object.spec.initContainers) == 0) &&
+        (!has(object.spec.ephemeralContainers) || size(object.spec.ephemeralContainers) == 0)
+      message: a runner pod has one container
+    - expression: >-
+        !(has(object.spec.hostNetwork) && object.spec.hostNetwork) &&
+        !(has(object.spec.hostPID) && object.spec.hostPID) &&
+        !(has(object.spec.hostIPC) && object.spec.hostIPC)
+      message: a runner pod shares no host namespace
+    - expression: "!has(object.spec.volumes) || object.spec.volumes.all(v, !has(v.hostPath))"
+      message: a runner pod mounts no host path
+    - expression: >-
+        object.spec.containers.all(c, has(c.securityContext) &&
+          has(c.securityContext.privileged) && !c.securityContext.privileged &&
+          has(c.securityContext.allowPrivilegeEscalation) && !c.securityContext.allowPrivilegeEscalation &&
+          has(c.securityContext.capabilities) && has(c.securityContext.capabilities.drop) &&
+          "ALL" in c.securityContext.capabilities.drop &&
+          !has(c.securityContext.capabilities.add))
+      message: a runner container is unprivileged with every capability dropped
+    - expression: has(object.spec.securityContext) && has(object.spec.securityContext.runAsNonRoot) && object.spec.securityContext.runAsNonRoot
+      message: a runner pod runs as a non-root user
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: vmjob-operator-pods
+spec:
+  policyName: vmjob-operator-pods
+  validationActions: [Deny]

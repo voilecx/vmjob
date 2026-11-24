@@ -1,0 +1,29 @@
+# kubectl apply -f examples/hello.yaml && kubectl get vmj hello -w
+# The guest image is one you build (docs/guest-images.md); the claim is any
+# ReadWriteOnce volume.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: results
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: vmjob.voile.cx/v1alpha1
+kind: VmJob
+metadata:
+  name: hello
+spec:
+  kernel: { image: registry.example/guest:latest, path: vmlinux }
+  rootfs: { image: registry.example/guest:latest, path: rootfs.ext4 }
+  command: [/bin/sh, -c, "uname -a > out/uname.txt && ls /sys/class/net > out/net.txt"]
+  cpus: 1
+  memoryMib: 512
+  timeoutSeconds: 120
+  output:
+    volume: { name: results, persistentVolumeClaim: { claimName: results } }
+    path: hello
+    maxMib: 16
+  ttlSecondsAfterFinished: 3600

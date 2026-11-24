@@ -1,0 +1,102 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CLOUD_HYPERVISOR_URL: https://github.com/cloud-hypervisor/cloud-hypervisor/releases/download/v55.0/cloud-hypervisor-static
+  CLOUD_HYPERVISOR_SHA256: ce7133bf535ed5a4e2a63ea1f26025445a5b1241f73ddfb81ff2fbcb2e803a59
+  GUEST_KERNEL_URL: https://github.com/cloud-hypervisor/linux/releases/download/ch-release-v6.16.9-20261001/vmlinux-x86_64
+  GUEST_KERNEL_SHA256: 0d1d7ec2443f9a65fa1191ffb5ca2370934964405cece218b20796f0a4520b23
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: Swatinem/rust-cache@v2
+      - run: rustup component add rustfmt clippy
+      - run: cargo fmt --check
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked
+      - name: The checked-in CRD is the one the code makes
+        run: |
+          cargo run -q --locked -p vmjob-operator -- crd > "$RUNNER_TEMP/crd.json"
+          diff -u deploy/base/crd.json "$RUNNER_TEMP/crd.json"
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - run: cargo audit --deny warnings
+
+  vm:
+    # The runner against real virtual machines: GitHub's Linux runners have KVM.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: Swatinem/rust-cache@v2
+      - run: rustup target add x86_64-unknown-linux-musl
+      - name: A test guest
+        run: |
+          sudo apt-get update -q && sudo apt-get install -yq busybox-static musl-tools e2fsprogs
+          sudo chmod 0666 /dev/kvm
+          guest="$RUNNER_TEMP/guest" && mkdir -p "$guest/root"/{sbin,bin,dev,proc,sys,tmp,j}
+          curl -fsSL -o "$guest/cloud-hypervisor" "$CLOUD_HYPERVISOR_URL"
+          curl -fsSL -o "$guest/vmlinux" "$GUEST_KERNEL_URL"
+          (cd "$guest" && printf '%s  cloud-hypervisor\n%s  vmlinux\n' "$CLOUD_HYPERVISOR_SHA256" "$GUEST_KERNEL_SHA256" | sha256sum -c -)
+          chmod +x "$guest/cloud-hypervisor"
+          cargo build --release --locked --target x86_64-unknown-linux-musl -p vmjob-init
+          cp target/x86_64-unknown-linux-musl/release/vmjob-init "$guest/root/sbin/vmjob-init"
+          cp /bin/busybox "$guest/root/bin/busybox" && ln -s busybox "$guest/root/bin/sh"
+          for tool in cat echo head ln ls mkdir sleep; do ln -s busybox "$guest/root/bin/$tool"; done
+          mkfs.ext4 -q -F -d "$guest/root" "$guest/rootfs.ext4" 64M
+          {
+            echo "VMJOB_TEST_HYPERVISOR=$guest/cloud-hypervisor"
+            echo "VMJOB_TEST_KERNEL=$guest/vmlinux"
+            echo "VMJOB_TEST_ROOTFS=$guest/rootfs.ext4"
+          } >> "$GITHUB_ENV"
+      - run: cargo test --locked -p vmjob-runner --test vm -- --nocapture
+
+  images:
+    needs: [check, vm]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        target: [operator, runner, kvm-plugin, init]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          platforms: linux/amd64
+          push: ${{ github.ref == 'refs/heads/main' }}
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/vmjob-${{ matrix.target }}:main
+            ghcr.io/${{ github.repository_owner }}/vmjob-${{ matrix.target }}:sha-${{ github.sha }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to: type=gha,scope=${{ matrix.target }},mode=max

@@ -1,0 +1,19 @@
+[package]
+name = "vmjob-runner"
+description = "Boots one VmJob's virtual machine in Cloud Hypervisor and moves its files in and out"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+vmjob-api.workspace = true
+anyhow.workspace = true
+serde_json.workspace = true
+tar.workspace = true
+cap-std = "4"
+tokio.workspace = true
+
+[lints]
+workspace = true

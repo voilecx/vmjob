@@ -1,0 +1,10 @@
+# The operator and the device plugin. The plugin is privileged, so this
+# namespace is too; runner pods run in the namespaces of their jobs, which can
+# stay `restricted`.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vmjob-system
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/warn: privileged

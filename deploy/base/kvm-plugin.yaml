@@ -1,0 +1,50 @@
+# The device plugin for vmjob.voile.cx/kvm on every node that has /dev/kvm.
+# It needs the kubelet's device-plugins directory (hostPath, so its namespace
+# is `privileged` for Pod Security) and CHOWN, to give /dev/kvm to the runner's
+# group with mode 0660; it has no other capability.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: vmjob-kvm-plugin
+  namespace: vmjob-system
+spec:
+  selector:
+    matchLabels:
+      app: vmjob-kvm-plugin
+  template:
+    metadata:
+      labels:
+        app: vmjob-kvm-plugin
+    spec:
+      automountServiceAccountToken: false
+      priorityClassName: system-node-critical
+      containers:
+        - name: plugin
+          image: ghcr.io/voilecx/vmjob-kvm-plugin:main
+          env:
+            - name: RUST_LOG
+              value: info
+          resources:
+            requests: { cpu: 5m, memory: 16Mi }
+            limits: { memory: 64Mi }
+          securityContext:
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+              add: [CHOWN]
+          volumeMounts:
+            - name: device-plugins
+              mountPath: /var/lib/kubelet/device-plugins
+            - name: kvm
+              mountPath: /dev/kvm
+      volumes:
+        - name: device-plugins
+          hostPath:
+            path: /var/lib/kubelet/device-plugins
+            type: Directory
+        - name: kvm
+          hostPath:
+            path: /dev/kvm
+            type: CharDevice
