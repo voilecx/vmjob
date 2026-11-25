@@ -52,12 +52,25 @@ impl Drop for Scratch {
 /// Run `script` in a guest with `timeout` seconds and `output_mib` of output
 /// disk (0: no output), and read the runner's result.
 fn run(guest: &Guest, dir: &Scratch, script: &str, timeout: u32, output_mib: u64) -> RunnerResult {
+    run_with(guest, dir, script, timeout, output_mib, &[])
+}
+
+/// [`run`] with the job's own disk files attached, `(file, read-only)`.
+fn run_with(
+    guest: &Guest,
+    dir: &Scratch,
+    script: &str,
+    timeout: u32,
+    output_mib: u64,
+    disks: &[(&Path, bool)],
+) -> RunnerResult {
     let config = RunnerConfig {
         kernel: guest.kernel.display().to_string(),
         rootfs: guest.rootfs.display().to_string(),
         input: Some(dir.0.join("in").display().to_string()),
         output: (output_mib > 0).then(|| (dir.0.join("out").display().to_string(), output_mib << 20)),
         work: dir.0.join("work").display().to_string(),
+        disks: disks.iter().map(|(path, read_only)| (path.display().to_string(), *read_only)).collect(),
         kernel_args: None,
         job: GuestJob {
             command: vec!["/bin/sh".into(), "-c".into(), script.into()],
@@ -109,6 +122,32 @@ fn files_go_in_and_come_out_with_the_exit_status() {
     assert_eq!(read("copy.txt"), "from the host\n");
     assert_eq!(read("env.txt"), "hi\n");
     assert_eq!(read("sub/y"), "x\n");
+}
+
+#[test]
+fn a_writable_disk_keeps_what_the_guest_wrote_for_the_next_job() {
+    let guest = needs_kvm!();
+    let dir = Scratch::new("disks");
+    let (kept, fixed) = (dir.0.join("kept.img"), dir.0.join("fixed.img"));
+    std::fs::write(&kept, vec![0_u8; 1 << 20]).expect("kept");
+    std::fs::write(&fixed, b"fixed".repeat(1 << 10)).expect("fixed");
+    let disks = [(kept.as_path(), false), (fixed.as_path(), true)];
+    let first = run_with(&guest, &dir, "echo kept > /dev/vdd && ! echo x 2>/dev/null > /dev/vde", 60, 1, &disks);
+    assert_eq!(first.reason, None, "{}", first.message);
+    let second = run_with(&guest, &dir, "head -c 5 /dev/vdd > out/back.txt", 60, 1, &disks);
+    assert_eq!(second.reason, None, "{}", second.message);
+    assert_eq!(std::fs::read_to_string(dir.0.join("out/back.txt")).expect("back"), "kept\n");
+    assert!(std::fs::read(&fixed).expect("fixed").starts_with(b"fixedfixed"));
+}
+
+#[test]
+fn a_missing_disk_file_is_refused_before_boot() {
+    let guest = needs_kvm!();
+    let dir = Scratch::new("no-disk");
+    let made = dir.0.join("made.img");
+    std::fs::create_dir(&made).expect("made");
+    let result = run_with(&guest, &dir, "true", 60, 1, &[(made.as_path(), false)]);
+    assert_eq!(result.reason.as_deref(), Some("RunnerFailed"), "{}", result.message);
 }
 
 #[test]

@@ -4,11 +4,13 @@
 VmJob ──operator──▶ runner pod (restricted Pod Security)
                      ├─ kernel, rootfs   image volumes, read-only
                      ├─ input, output    the job's volumes
+                     ├─ disk-0..3        the job's disk files, one file each
                      ├─ work             emptyDir: the input tar, the output disk
                      └─ vmjob-runner ──▶ cloud-hypervisor (no --net)
                           /dev/vda  root filesystem, read-only
                           /dev/vdb  input tar, read-only
                           /dev/vdc  output disk
+                          /dev/vdd… the job's disks, as they are
                           guest PID 1: vmjob-init
 ```
 
@@ -30,7 +32,9 @@ VmJob ──operator──▶ runner pod (restricted Pod Security)
    pod that disappears before it ended fails the job with `PodLost`.
 3. The runner writes `/dev/vdb`: a tar of the input directory with
    `.vmjob/job.json` (the command and environment) first. It creates
-   `/dev/vdc`, `output.maxMib` of zeroes (1 MiB without an output).
+   `/dev/vdc`, `output.maxMib` of zeroes (1 MiB without an output). Each of
+   `disks` is attached after it as it is (`/dev/vdd`, ...), read-only where
+   `readOnly` says; the guest's command mounts or reads it itself.
 4. Cloud Hypervisor boots the kernel with `root=/dev/vda ro
    init=/sbin/vmjob-init panic=1` plus `kernelArgs`. The guest console streams
    to the pod log.

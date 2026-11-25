@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- `disks`: up to four raw disk image files of a volume, attached after the
+  output disk, writable or read-only. A writable one keeps what its guest
+  wrote for the next job that attaches it.
+
 ## 0.1.0
 
 First release.

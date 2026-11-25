@@ -39,7 +39,9 @@ hello   Succeeded   0      12s
 ## Features
 
 - **No network.** The VM gets a root disk, an input disk and an output disk,
-  and nothing else; its console goes to the runner pod's log.
+  plus up to four disk files the job names (`disks`: a cache a later job of
+  the same owner reattaches, say), and nothing else; its console goes to the
+  runner pod's log.
 - **Unprivileged runners.** Runner pods meet the `restricted` Pod Security
   Standard. `/dev/kvm` comes from a small device plugin.
 - **Untrusted output, handled as such.** Only regular files and directories

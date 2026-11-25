@@ -2,7 +2,7 @@ use k8s_openapi::api::core::v1::{
     ContainerState, ContainerStateTerminated, ContainerStatus, LocalObjectReference, PersistentVolumeClaimVolumeSource,
     PodStatus,
 };
-use vmjob_api::{ImageFile, Output, Transfer, VmJobSpec};
+use vmjob_api::{DiskFile, ImageFile, Output, Transfer, VmJobSpec};
 
 use super::*;
 
@@ -32,6 +32,7 @@ fn job() -> VmJob {
             memory_mib: 2048,
             input: Some(Transfer { volume: claim("jobs"), path: "1/in".into() }),
             output: Some(Output { to: Transfer { volume: claim("jobs"), path: "1/out".into() }, max_mib: 512 }),
+            disks: Vec::new(),
             timeout_seconds: 600,
             ttl_seconds_after_finished: Some(60),
             node_selector: BTreeMap::new(),
@@ -99,6 +100,32 @@ fn the_volumes_are_the_images_the_transfers_and_the_work_directory() {
     assert_eq!(config.kernel, "/vmjob/kernel/vmlinux");
     assert_eq!(config.output, Some(("/vmjob/output".into(), 512 << 20)));
     assert!(config.job.output);
+}
+
+#[test]
+fn each_disk_is_its_own_file_mount_in_order() {
+    let mut job = job();
+    let claim = job.spec.input.as_ref().expect("input").volume.clone();
+    job.spec.disks = vec![
+        DiskFile { volume: claim.clone(), path: "cache/a.img".into(), read_only: false },
+        DiskFile { volume: claim, path: "base.img".into(), read_only: true },
+    ];
+    let pod = build(&job, &settings()).expect("pod");
+    let spec = pod.spec.as_ref().expect("spec");
+    let names: Vec<&str> = spec.volumes.iter().flatten().map(|v| v.name.as_str()).collect();
+    assert_eq!(names, ["kernel", "rootfs", "input", "output", "disk-0", "disk-1", "work"]);
+    let mounts = spec.containers[0].volume_mounts.as_ref().expect("mounts");
+    let mount = |name: &str| mounts.iter().find(|m| m.name == name).expect(name);
+    let (first, second) = (mount("disk-0"), mount("disk-1"));
+    assert_eq!(
+        (first.mount_path.as_str(), first.read_only, first.sub_path.as_deref()),
+        ("/vmjob/disk-0", Some(false), Some("cache/a.img"))
+    );
+    assert_eq!((second.read_only, second.sub_path.as_deref()), (Some(true), Some("base.img")));
+    let config: RunnerConfig =
+        serde_json::from_str(spec.containers[0].env.as_ref().expect("env")[0].value.as_deref().expect("value"))
+            .expect("config");
+    assert_eq!(config.disks, [("/vmjob/disk-0".to_owned(), false), ("/vmjob/disk-1".to_owned(), true)]);
 }
 
 fn ended(phase: &str, message: Option<&str>, reason: Option<&str>) -> Pod {

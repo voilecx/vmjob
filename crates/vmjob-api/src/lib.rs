@@ -9,6 +9,7 @@
 //! | `/dev/vda` | the guest root filesystem, read-only                  |
 //! | `/dev/vdb` | a tar of the input directory plus [`GUEST_JOB`]       |
 //! | `/dev/vdc` | zeroes; the guest writes a tar of its output there    |
+//! | `/dev/vdd`… | the job's [`VmJobSpec::disks`], in order              |
 //!
 //! The guest's init ([`GuestJob`]) unpacks the input, runs the command, packs
 //! its output directory and [`GUEST_EXIT`], and powers the VM off. The runner
@@ -81,6 +82,10 @@ pub struct VmJobSpec {
     /// directory of a volume after the command ends.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub output: Option<Output>,
+    /// Raw disk image files attached after the output disk, in order: the
+    /// guest sees them as `/dev/vdd`, `/dev/vde`, ... At most [`MAX_DISKS`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub disks: Vec<DiskFile>,
     /// The longest the virtual machine may run, 1..=86400 seconds.
     pub timeout_seconds: u32,
     /// Remove the job this long after it finished. Absent: keep it.
@@ -119,6 +124,27 @@ pub struct Transfer {
     /// The directory inside the volume, relative. Empty: its root.
     #[serde(default)]
     pub path: String,
+}
+
+/// The most [`VmJobSpec::disks`] a job may attach.
+pub const MAX_DISKS: usize = 4;
+
+/// A raw disk image file of a volume, attached to the guest as one block
+/// device. The runner never reads or writes its contents: what a writable
+/// disk's guest writes stays in the file, for whatever job attaches it next.
+/// The file must already exist as a regular file the runner's user (65532)
+/// can open; a missing one is not created.
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DiskFile {
+    /// The volume: any source the runner's pod can mount. Its `name` is
+    /// replaced with the runner's own.
+    pub volume: Volume,
+    /// The file inside the volume, relative.
+    pub path: String,
+    /// Attach it read-only.
+    #[serde(default)]
+    pub read_only: bool,
 }
 
 /// Where the output goes, and how much of it there may be.
@@ -234,6 +260,14 @@ impl VmJobSpec {
                 return bad("a transfer's path must be relative, without `..`");
             }
         }
+        if self.disks.len() > MAX_DISKS {
+            return bad("disks may hold at most 4 files");
+        }
+        for disk in &self.disks {
+            if disk.path.is_empty() || !relative_path(&disk.path) || disk.path.ends_with('/') {
+                return bad("a disk's path must name a file, relative, without `..`");
+            }
+        }
         if let Some(output) = &self.output
             && !(1..=65_536).contains(&output.max_mib)
         {
@@ -273,6 +307,9 @@ pub struct RunnerConfig {
     pub output: Option<(String, u64)>,
     /// Where the runner keeps the disks it makes.
     pub work: String,
+    /// The job's own disk files and whether each is read-only, in order.
+    #[serde(default)]
+    pub disks: Vec<(String, bool)>,
     /// Kernel command line additions.
     pub kernel_args: Option<String>,
     /// What the guest runs.
