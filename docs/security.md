@@ -28,6 +28,13 @@
   never replaced, with mode 0644 or 0755.
 - What the guest says about itself, its exit status and console, is reported
   as it says it; nothing acts on it.
+- A job's own **disk files** (`disks`) are attached as raw block devices and
+  never read by the runner: what a guest writes to a writable one reaches only
+  the next guest that attaches the same file. Whoever creates the `VmJob`
+  chooses that file, and with it which jobs share what one guest wrote. Each
+  is mounted into the runner pod alone, by `subPath`, so the runner sees no
+  other file of its volume; one that is not a non-empty regular file fails
+  the job before boot.
 
 ## The runner
 

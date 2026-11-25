@@ -19,6 +19,7 @@ fn spec() -> VmJobSpec {
         memory_mib: 512,
         input: None,
         output: None,
+        disks: Vec::new(),
         timeout_seconds: 60,
         ttl_seconds_after_finished: None,
         node_selector: BTreeMap::new(),
@@ -26,9 +27,16 @@ fn spec() -> VmJobSpec {
     }
 }
 
+fn disk(path: &str) -> DiskFile {
+    DiskFile { volume: Volume::default(), path: path.into(), read_only: false }
+}
+
 #[test]
 fn a_plain_spec_is_valid() {
     assert_eq!(spec().validate(), Ok(()));
+    let mut with_disks = spec();
+    with_disks.disks = vec![disk("cache/a.img"); MAX_DISKS];
+    assert_eq!(with_disks.validate(), Ok(()));
 }
 
 /// A change to a valid spec, and the field its error names.
@@ -58,6 +66,11 @@ fn bounds_and_paths_are_checked() {
                 s.output = Some(Output { to: Transfer { volume: Volume::default(), path: String::new() }, max_mib: 0 });
             }),
         ),
+        ("disk", Box::new(|s| s.disks = vec![disk("cache/a.img"); MAX_DISKS + 1])),
+        ("disk", Box::new(|s| s.disks = vec![disk("../a.img")])),
+        ("disk", Box::new(|s| s.disks = vec![disk("/a.img")])),
+        ("disk", Box::new(|s| s.disks = vec![disk("")])),
+        ("disk", Box::new(|s| s.disks = vec![disk("cache/")])),
         ("kernelArgs", Box::new(|s| s.kernel_args = Some("init=/bin/sh\nquiet".into()))),
         ("env", Box::new(|s| _ = s.env.insert("A=B".into(), "c".into()))),
     ];

@@ -62,6 +62,20 @@ pub fn create_output(dest: &Path, bytes: u64) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Check that one of the job's disk files can be attached: a non-empty
+/// regular file. A subPath mount of a file the volume lacks is a directory
+/// Kubernetes made in its place.
+pub fn check_file(path: &Path) -> anyhow::Result<()> {
+    let meta = fs::metadata(path).with_context(|| format!("reading the disk file {}", path.display()))?;
+    if !meta.is_file() {
+        bail!("the disk file {} is not a regular file", path.display());
+    }
+    if meta.len() == 0 {
+        bail!("the disk file {} is empty", path.display());
+    }
+    Ok(())
+}
+
 /// Bounds on what an output tar may unpack to.
 #[derive(Debug, Clone, Copy)]
 pub struct Limits {

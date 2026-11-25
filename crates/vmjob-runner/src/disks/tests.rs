@@ -185,3 +185,18 @@ fn an_output_does_not_replace_what_the_destination_holds() {
     assert_eq!(fs::read(dest.0.join("a")).ok().as_deref(), Some(&b"before"[..]));
     assert!(!dest.0.join("b").exists());
 }
+
+#[test]
+fn only_a_non_empty_regular_file_is_attached() {
+    let scratch = Scratch::new("check-file");
+    let file = scratch.0.join("cache.img");
+    fs::write(&file, [0_u8; 512]).unwrap_or_else(|e| unreachable!("{e}"));
+    assert!(check_file(&file).is_ok());
+    let empty = scratch.0.join("empty.img");
+    fs::write(&empty, []).unwrap_or_else(|e| unreachable!("{e}"));
+    assert!(check_file(&empty).is_err());
+    let made = scratch.0.join("made.img");
+    fs::create_dir(&made).unwrap_or_else(|e| unreachable!("{e}"));
+    assert!(check_file(&made).is_err(), "a directory Kubernetes made for a missing file");
+    assert!(check_file(&scratch.0.join("absent.img")).is_err());
+}

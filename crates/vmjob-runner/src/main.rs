@@ -58,16 +58,22 @@ async fn run() -> anyhow::Result<RunnerResult> {
             .await??;
     }
     disks::create_output(&output, output_bytes)?;
+    let mut attached = vec![
+        vm::Disk { path: PathBuf::from(&config.rootfs), readonly: true },
+        vm::Disk { path: input.clone(), readonly: true },
+        vm::Disk { path: output.clone(), readonly: false },
+    ];
+    for (path, readonly) in &config.disks {
+        let path = PathBuf::from(path);
+        disks::check_file(&path)?;
+        attached.push(vm::Disk { path, readonly: *readonly });
+    }
 
     let boot = vm::Boot {
         hypervisor,
         kernel: PathBuf::from(&config.kernel),
         cmdline: cmdline(config.kernel_args.as_deref()),
-        disks: vec![
-            vm::Disk { path: PathBuf::from(&config.rootfs), readonly: true },
-            vm::Disk { path: input.clone(), readonly: true },
-            vm::Disk { path: output.clone(), readonly: false },
-        ],
+        disks: attached,
         cpus: config.cpus,
         memory_mib: config.memory_mib,
         events: work.join("events.json"),

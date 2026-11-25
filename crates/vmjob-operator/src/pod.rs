@@ -32,6 +32,11 @@ const INPUT: &str = "/vmjob/input";
 const OUTPUT: &str = "/vmjob/output";
 const WORK: &str = "/vmjob/work";
 
+/// Where the runner finds the job's disk file `i`.
+fn disk_path(i: usize) -> String {
+    format!("/vmjob/disk-{i}")
+}
+
 /// The pod's name for a job: as much of the job's name as fits, then the
 /// first characters of its uid, so two jobs never share a pod name and the
 /// name stays a valid DNS label (at most 63 characters, alphanumeric at both
@@ -50,7 +55,8 @@ pub fn name(job: &VmJob) -> String {
 /// an unprivileged user with no capabilities, a read-only root filesystem,
 /// the runtime's seccomp profile and no service account token; `/dev/kvm`
 /// comes from the [`KVM_RESOURCE`] device plugin, and the only volumes are the
-/// two images, the job's two transfer volumes and its work directory.
+/// two images, the job's two transfer volumes, its disk files and its work
+/// directory.
 ///
 /// # Errors
 /// If the job has no name or namespace, or its configuration cannot be written.
@@ -64,6 +70,7 @@ pub fn build(job: &VmJob, settings: &Settings) -> anyhow::Result<Pod> {
         input: spec.input.as_ref().map(|_| INPUT.to_owned()),
         output: output_bytes.map(|bytes| (OUTPUT.to_owned(), bytes)),
         work: WORK.to_owned(),
+        disks: spec.disks.iter().enumerate().map(|(i, d)| (disk_path(i), d.read_only)).collect(),
         kernel_args: spec.kernel_args.clone(),
         job: GuestJob { command: spec.command.clone(), env: spec.env.clone(), output: spec.output.is_some() },
         cpus: spec.cpus,
@@ -169,6 +176,13 @@ fn volumes(
     if let Some(output) = &spec.output {
         volumes.push(Volume { name: "output".into(), ..output.to.volume.clone() });
         mounts.push(mount("output", OUTPUT, false, &output.to.path));
+    }
+    // Each disk is its file alone, mounted by subPath: the runner sees no
+    // other file of the volume, though the volume may hold other jobs' disks.
+    for (i, disk) in spec.disks.iter().enumerate() {
+        let name = format!("disk-{i}");
+        volumes.push(Volume { name: name.clone(), ..disk.volume.clone() });
+        mounts.push(mount(&name, &disk_path(i), disk.read_only, &disk.path));
     }
     let work_mib = u64::from(settings.work_mib) + output_bytes.map_or(1, |b| b >> 20);
     volumes.push(Volume {
